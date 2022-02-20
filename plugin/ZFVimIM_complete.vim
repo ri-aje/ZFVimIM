@@ -1,3 +1,6 @@
+if !get(g:, 'ZFVimIM_enable', 1)
+    finish
+endif
 
 " params:
 "   key : the input key, e.g. `ceshi`

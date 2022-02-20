@@ -1,3 +1,6 @@
+if !get(g:, 'ZFVimIM_enable', 1)
+    finish
+endif
 
 " ============================================================
 " -1 : only when all git info supplied
