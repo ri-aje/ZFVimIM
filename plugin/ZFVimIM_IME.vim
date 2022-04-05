@@ -54,9 +54,9 @@ endfunction
 
 " ============================================================
 if get(g:, 'ZFVimIM_keymap', 1)
-    nnoremap <expr><silent> ;; ZFVimIME_keymap_toggle_n()
+    " nnoremap <expr><silent> ;; ZFVimIME_keymap_toggle_n()
     inoremap <expr><silent> ;; ZFVimIME_keymap_toggle_i()
-    vnoremap <expr><silent> ;; ZFVimIME_keymap_toggle_v()
+    " vnoremap <expr><silent> ;; ZFVimIME_keymap_toggle_v()
 
     " nnoremap <expr><silent> ;: ZFVimIME_keymap_next_n()
     " inoremap <expr><silent> ;: ZFVimIME_keymap_next_i()
