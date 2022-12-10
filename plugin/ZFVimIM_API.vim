@@ -18,14 +18,11 @@ if !exists('g:ZFVimIM_sentence')
     let g:ZFVimIM_sentence = 1
 endif
 
-if !exists('g:ZFVimIM_crossDbLimitWhenMatch')
-    let g:ZFVimIM_crossDbLimitWhenMatch = 2
+if !exists('g:ZFVimIM_crossable')
+    let g:ZFVimIM_crossable = 2
 endif
 if !exists('g:ZFVimIM_crossDbLimit')
-    let g:ZFVimIM_crossDbLimit = 4
-endif
-if !exists('g:ZFVimIM_crossDbAllowSubMatch')
-    let g:ZFVimIM_crossDbAllowSubMatch = 0
+    let g:ZFVimIM_crossDbLimit = 2
 endif
 if !exists('g:ZFVimIM_crossDbPos')
     let g:ZFVimIM_crossDbPos = 5
@@ -47,12 +44,45 @@ function! ZFVimIM_randName()
 endfunction
 
 function! ZFVimIM_rm(path)
-    if has('unix')
-        silent! call system('rm -rf "' . CygpathFix_absPath(a:path) . '"')
-    elseif has('win32')
+    if (has('win32') || has('win64')) && !has('unix')
         silent! call system('rmdir /s/q "' . substitute(CygpathFix_absPath(a:path), '/', '\', 'g') . '"')
+    else
+        silent! call system('rm -rf "' . CygpathFix_absPath(a:path) . '"')
     endif
 endfunction
+
+if !exists('*ZFVimIM_json_available')
+    " fallback to `retorillo/json-ponyfill.vim` if installed
+    function! ZFVimIM_json_available()
+        if !exists('s:ZFVimIM_json_available')
+            if exists('*json_decode')
+                let s:ZFVimIM_json_available = 1
+            else
+                let s:ZFVimIM_json_available = 0
+                try
+                    call json_ponyfill#json_decode('{}')
+                    let s:ZFVimIM_json_available = 1
+                catch
+                endtry
+            endif
+        endif
+        return s:ZFVimIM_json_available
+    endfunction
+    function! ZFVimIM_json_encode(expr)
+        if exists('*json_encode')
+            return json_encode(a:expr)
+        else
+            return json_ponyfill#json_encode(a:expr)
+        endif
+    endfunction
+    function! ZFVimIM_json_decode(expr)
+        if exists('*json_decode')
+            return json_decode(a:expr)
+        else
+            return json_ponyfill#json_decode(a:expr)
+        endif
+    endfunction
+endif
 
 function! CygpathFix_absPath(path)
     if len(a:path) <= 0|return ''|endif
@@ -80,13 +110,25 @@ endfunction
 " db : [
 "   {
 "     'dbId' : 'auto generated id',
-"     'name' : 'name of the db, ZFVimIM by default',
-"     'priority' : 'priority of the db, smaller value has higher priority, 100 by default',
-"     'switchable' : '1 by default, when off, won't be enabled by ZFVimIME_keymap_next_n() series',
-"     'editable' : '1 by default, when off, no dbEdit would applied',
-"     'dbCallback' : 'func(key, option), see ZFVimIM_complete',
+"     'name' : '(required) name of the db',
+"     'priority' : '(optional) priority of the db, smaller value has higher priority, 100 by default',
+"     'switchable' : '(optional) 1 by default, when off, won't be enabled by ZFVimIME_keymap_next_n() series',
+"     'editable' : '(optional) 1 by default, when off, no dbEdit would applied',
+"     'crossable' : '(optional) g:ZFVimIM_crossable by default, whether to show result when inputing in other db',
+"                   // 0 : disable
+"                   // 1 : show only when full match
+"                   // 2 : show and allow predict
+"                   // 3 : show and allow predict and sub match
+"     'crossDbLimit' : '(optional) g:ZFVimIM_crossDbLimit by default, when crossable, limit max result to this num',
+"     'dbCallback' : '(optional) func(key, option), see ZFVimIM_complete',
+"                    // when dbCallback supplied, words would be fetched from this callback instead
 "     'menuLabel' : '(optional) string or function(item), when not empty, show label after key hint',
 "                   // when not set, or set to number `0`, we would show db name if it's completed from crossDb
+"     'implData' : {
+"       // extra data for impl
+"     },
+"
+"     // generated data:
 "     'dbMap' : { // split a-z to improve performance, ensured empty if no data
 "       'a' : [
 "         'a#啊,阿#3,2',
@@ -104,9 +146,6 @@ endfunction
 "       },
 "       ...
 "     ],
-"     'implData' : {
-"       // extra data for impl
-"     },
 "   },
 "   ...
 " ]
@@ -155,6 +194,8 @@ function! ZFVimIM_dbInit(option)
                 \   'priority' : -1,
                 \   'switchable' : 1,
                 \   'editable' : 1,
+                \   'crossable' : g:ZFVimIM_crossable,
+                \   'crossDbLimit' : g:ZFVimIM_crossDbLimit,
                 \   'dbCallback' : '',
                 \   'menuLabel' : 0,
                 \   'dbMap' : {},
@@ -214,20 +255,20 @@ function! ZFVimIM_dbEditApply(db, dbEdit)
     call ZFVimIM_DEBUG_profileStop()
 endfunction
 
-function! ZFVimIM_wordAdd(word, key, ...)
-    call s:dbEdit('add', a:word, a:key, get(a:, 1, {}))
+function! ZFVimIM_wordAdd(db, word, key)
+    call s:dbEdit(a:db, a:word, a:key, 'add')
 endfunction
-command! -nargs=+ IMAdd :call ZFVimIM_wordAdd(<f-args>)
+command! -nargs=+ IMAdd :call ZFVimIM_wordAdd({}, <f-args>)
 
-function! ZFVimIM_wordRemove(word, ...)
-    call s:dbEditWildKey('remove', a:word, get(a:, 1, ''), get(a:, 2, {}))
+function! ZFVimIM_wordRemove(db, word, ...)
+    call s:dbEditWildKey(a:db, a:word, get(a:, 1, ''), 'remove')
 endfunction
-command! -nargs=+ IMRemove :call ZFVimIM_wordRemove(<f-args>)
+command! -nargs=+ IMRemove :call ZFVimIM_wordRemove({}, <f-args>)
 
-function! ZFVimIM_wordReorder(word, ...)
-    call s:dbEditWildKey('reorder', a:word, get(a:, 1, ''), get(a:, 2, {}))
+function! ZFVimIM_wordReorder(db, word, ...)
+    call s:dbEditWildKey(a:db, a:word, get(a:, 1, ''), 'reorder')
 endfunction
-command! -nargs=+ IMReorder :call ZFVimIM_wordReorder(<f-args>)
+command! -nargs=+ IMReorder :call ZFVimIM_wordReorder({}, <f-args>)
 
 function! s:dbItemReorderFunc(item1, item2)
     return (a:item2['count'] - a:item1['count'])
@@ -311,9 +352,11 @@ function! ZFVimIM_dbItemEncode(dbItem)
     return dbItemEncoded
 endfunction
 
-function! ZFVimIM_complete(key, ...)
-    return ZFVimIM_completeDefault(a:key, get(a:, 1, {}))
-endfunction
+if !exists('*ZFVimIM_complete')
+    function! ZFVimIM_complete(key, ...)
+        return ZFVimIM_completeDefault(a:key, get(a:, 1, {}))
+    endfunction
+endif
 
 
 " db: {
@@ -334,14 +377,17 @@ function! ZFVimIM_dbSearch(db, c, pattern, start)
     call ZFVimIM_DEBUG_profileStart('dbSearch')
     let index = match(get(a:db['dbMap'], a:c, []), a:pattern, a:start)
     call ZFVimIM_DEBUG_profileStop()
-    let a:db['dbSearchCache'][patternKey] = index
-    call add(a:db['dbSearchCacheKeys'], patternKey)
 
-    " limit cache size
-    if len(a:db['dbSearchCacheKeys']) >= 300
-        for patternKey in remove(a:db['dbSearchCacheKeys'], 0, 200)
-            unlet a:db['dbSearchCache'][patternKey]
-        endfor
+    if a:start == 0
+        let a:db['dbSearchCache'][patternKey] = index
+        call add(a:db['dbSearchCacheKeys'], patternKey)
+
+        " limit cache size
+        if len(a:db['dbSearchCacheKeys']) >= 300
+            for patternKey in remove(a:db['dbSearchCacheKeys'], 0, 200)
+                unlet a:db['dbSearchCache'][patternKey]
+            endfor
+        endif
     endif
 
     return index
@@ -494,7 +540,7 @@ function! s:dbSave(db, dbFile, ...)
 endfunction
 
 " ============================================================
-function! s:dbEditWildKey(action, word, key, db)
+function! s:dbEditWildKey(db, word, key, action)
     if empty(a:db)
         if g:ZFVimIM_dbIndex >= len(g:ZFVimIM_db)
             return
@@ -507,7 +553,7 @@ function! s:dbEditWildKey(action, word, key, db)
         return
     endif
     if !empty(a:key)
-        call s:dbEdit(a:action, a:word, a:key, db)
+        call s:dbEdit(db, a:word, a:key, a:action)
         return
     endif
     if empty(a:word)
@@ -528,11 +574,11 @@ function! s:dbEditWildKey(action, word, key, db)
     endfor
 
     for key in keyToApply
-        call s:dbEdit(a:action, a:word, key, db)
+        call s:dbEdit(db, a:word, key, a:action)
     endfor
 endfunction
 
-function! s:dbEdit(action, word, key, db)
+function! s:dbEdit(db, word, key, action)
     if empty(a:db)
         if g:ZFVimIM_dbIndex >= len(g:ZFVimIM_db)
             return

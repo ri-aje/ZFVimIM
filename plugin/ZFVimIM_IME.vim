@@ -6,8 +6,8 @@ endif
 if !exists('g:ZFVimIM_autoAddWordLen')
     let g:ZFVimIM_autoAddWordLen=3*4
 endif
-" function(userWords)
-" userWords: see ZFVimIM_complete
+" function(userWord)
+" userWord: see ZFVimIM_complete
 " return: 1 if need add word
 if !exists('g:ZFVimIM_autoAddWordChecker')
     let g:ZFVimIM_autoAddWordChecker=[]
@@ -27,6 +27,10 @@ augroup ZFVimIME_augroup
 
     autocmd User ZFVimIM_event_OnStop silent
 
+    autocmd User ZFVimIM_event_OnEnable silent
+
+    autocmd User ZFVimIM_event_OnDisable silent
+
     " added word can be checked by g:ZFVimIM_event_OnAddWord : {
     "   'dbId' : 'add to which db',
     "   'key' : 'matched full key',
@@ -42,6 +46,9 @@ augroup ZFVimIME_augroup
 
     " called when omni popup update, you may obtain current state by ZFVimIME_state()
     autocmd User ZFVimIM_event_OnUpdateOmni silent
+
+    " called when choosed omni popup item, use `g:ZFVimIM_choosedWord` to obtain choosed word
+    autocmd User ZFVimIM_event_OnCompleteDone silent
 augroup END
 
 function! ZFVimIME_init()
@@ -73,53 +80,52 @@ endif
 
 function! ZFVimIME_keymap_toggle_n()
     call ZFVimIME_toggle()
-    " redraw to ensure `b:keymap_name` updated
-    redraw!
+    call ZFVimIME_redraw()
     return ''
 endfunction
 function! ZFVimIME_keymap_toggle_i()
     call ZFVimIME_toggle()
-    redraw!
+    call ZFVimIME_redraw()
     return ''
 endfunction
 function! ZFVimIME_keymap_toggle_v()
     call ZFVimIME_toggle()
-    redraw!
+    call ZFVimIME_redraw()
     return ''
 endfunction
 
 function! ZFVimIME_keymap_next_n()
     call ZFVimIME_next()
-    redraw!
+    call ZFVimIME_redraw()
     return ''
 endfunction
 function! ZFVimIME_keymap_next_i()
     call ZFVimIME_next()
-    redraw!
+    call ZFVimIME_redraw()
     return ''
 endfunction
 function! ZFVimIME_keymap_next_v()
     call ZFVimIME_next()
-    redraw!
+    call ZFVimIME_redraw()
     return ''
 endfunction
 
 function! ZFVimIME_keymap_add_n()
-    if !s:started
+    if !ZFVimIME_started()
         call ZFVimIME_start()
     endif
     call feedkeys(":IMAdd\<space>\<c-c>q:kA", 'nt')
     return ''
 endfunction
 function! ZFVimIME_keymap_add_i()
-    if !s:started
+    if !ZFVimIME_started()
         call ZFVimIME_start()
     endif
     call feedkeys("\<esc>:IMAdd\<space>\<c-c>q:kA", 'nt')
     return ''
 endfunction
 function! ZFVimIME_keymap_add_v()
-    if !s:started
+    if !ZFVimIME_started()
         call ZFVimIME_start()
     endif
     call feedkeys("\"ty:IMAdd\<space>\<c-r>t\<space>\<c-c>q:kA", 'nt')
@@ -127,21 +133,21 @@ function! ZFVimIME_keymap_add_v()
 endfunction
 
 function! ZFVimIME_keymap_remove_n()
-    if !s:started
+    if !ZFVimIME_started()
         call ZFVimIME_start()
     endif
     call feedkeys(":IMRemove\<space>\<c-c>q:kA", 'nt')
     return ''
 endfunction
 function! ZFVimIME_keymap_remove_i()
-    if !s:started
+    if !ZFVimIME_started()
         call ZFVimIME_start()
     endif
     call feedkeys("\<esc>:IMRemove\<space>\<c-c>q:kA", 'nt')
     return ''
 endfunction
 function! ZFVimIME_keymap_remove_v()
-    if !s:started
+    if !ZFVimIME_started()
         call ZFVimIME_start()
     endif
     call feedkeys("\"tx:IMRemove\<space>\<c-r>t\<cr>", 'nt')
@@ -149,16 +155,16 @@ function! ZFVimIME_keymap_remove_v()
 endfunction
 
 if exists('*state')
-    function! s:updateChecker()
-        return !s:started || mode() != 'i' || match(state(), 'm') >= 0
+    function! s:updateDisabled()
+        return !ZFVimIME_started() || mode() != 'i' || match(state(), 'm') >= 0
     endfunction
 else
-    function! s:updateChecker()
-        return !s:started || mode() != 'i'
+    function! s:updateDisabled()
+        return !ZFVimIME_started() || mode() != 'i'
     endfunction
 endif
 function! ZFVimIME_keymap_update_i()
-    if s:updateChecker()
+    if s:updateDisabled()
         return ''
     endif
     if pumvisible()
@@ -175,49 +181,64 @@ if get(g:, 'ZFVimIME_fixCtrlC', 1)
     inoremap <c-c> <esc>
 endif
 
+if !exists('*ZFVimIME_redraw')
+    function! ZFVimIME_redraw()
+        " redraw to ensure `b:keymap_name` updated
+        " but redraw! would cause entire screen forced update
+        " typically b:keymap_name used only in statusline, update it instead of redraw!
+        if 0
+            redraw!
+        else
+            if 0
+                        \ || match(&statusline, '%k') >= 0
+                        \ || match(&statusline, 'ZFVimIME_IMEStatusline') >= 0
+                let &statusline = &statusline
+            endif
+            if 0
+                        \ || match(&l:statusline, '%k') >= 0
+                        \ || match(&l:statusline, 'ZFVimIME_IMEStatusline') >= 0
+                let &l:statusline = &l:statusline
+            endif
+        endif
+    endfunction
+endif
+
 function! ZFVimIME_started()
     return s:started
 endfunction
 
+function! ZFVimIME_enabled()
+    return s:enabled
+endfunction
+
 function! ZFVimIME_toggle()
-    if s:started
+    if ZFVimIME_started()
         call ZFVimIME_stop()
     else
         call ZFVimIME_start()
     endif
 endfunction
 
-function! s:fixIMState()
-    if mode() == 'i'
-        " :h i_CTRL-^
-        call feedkeys(nr2char(30), 'nt')
-        if &iminsert != s:started
-            call feedkeys(nr2char(30), 'nt')
-        endif
-    endif
-endfunction
 function! ZFVimIME_start()
-    call ZFVimIME_stop()
-    doautocmd User ZFVimIM_event_OnStart
+    if s:started
+        return
+    endif
     let s:started = 1
-    let &iminsert = s:started
-    call s:IME_start()
-    call s:fixIMState()
+    doautocmd User ZFVimIM_event_OnStart
+    call s:IME_enableStateUpdate()
 endfunction
 
 function! ZFVimIME_stop()
     if !s:started
-        return ''
+        return
     endif
     let s:started = 0
-    let &iminsert = s:started
-    call s:IME_stop()
-    call s:fixIMState()
+    call s:IME_enableStateUpdate()
     doautocmd User ZFVimIM_event_OnStop
 endfunction
 
 function! ZFVimIME_next()
-    if !s:started
+    if !ZFVimIME_started()
         return ZFVimIME_start()
     endif
     call ZFVimIME_switchToIndex(g:ZFVimIM_dbIndex + 1)
@@ -244,7 +265,7 @@ function! ZFVimIME_switchToIndex(dbIndex)
         return
     endif
     let g:ZFVimIM_dbIndex = dbIndex
-    call s:IME_update()
+    let b:keymap_name = ZFVimIME_IMEName()
     doautocmd User ZFVimIM_event_OnDbChange
 endfunction
 
@@ -253,7 +274,9 @@ function! ZFVimIME_state()
                 \   'key' : s:keyboard,
                 \   'list' : s:match_list,
                 \   'page' : s:page,
-                \   'start_column' : s:start_column,
+                \   'startColumn' : s:start_column,
+                \   'seamlessPos' : s:seamless_positions,
+                \   'userWord' : s:userWord,
                 \ }
 endfunction
 
@@ -289,12 +312,7 @@ function! ZFVimIME_label(n, ...)
 
     let s:confirmFlag = 1
     if !s:completeItemAvailable
-        let item = curPage[n]
-        call add(s:userWord, item)
-        if item['len'] == len(s:keyboard)
-            call s:addWordFromUserWord()
-            let s:userWord = []
-        endif
+        call s:didChoose(curPage[n])
     endif
     call s:resetAfterInsert()
     call feedkeys(key, 'nt')
@@ -356,6 +374,12 @@ function! ZFVimIME_space(...)
     endif
     let s:confirmFlag = 1
     let key = "\<c-y>\<c-r>=ZFVimIME_callOmni()\<cr>"
+    if !s:completeItemAvailable
+        " treat as selected first item
+        " would break if use <down> and <space> to choose
+        " but there seems no other way to detect the choosed index
+        call s:didChoose(s:match_list[s:page * &pumheight])
+    endif
     call s:resetAfterInsert()
     call feedkeys(key, 'nt')
     return ''
@@ -391,6 +415,21 @@ function! ZFVimIME_backspace(...)
         let key = "\<c-e>\<bs>\<c-r>=ZFVimIME_callOmni()\<cr>"
     else
         let key = "\<bs>"
+    endif
+    if !empty(s:seamless_positions)
+        let line = getline('.')
+        if !empty(line)
+            let bsLen = len(substitute(line, '^.*\(.\)$', '\1', ''))
+        else
+            let bsLen = 1
+        endif
+        let pos = getpos('.')[2]
+        if pos > bsLen
+            let pos -= bsLen
+        endif
+        if pos < s:seamless_positions[2]
+            let s:seamless_positions[2] = pos
+        endif
     endif
     call s:resetAfterInsert()
     call feedkeys(key, 'nt')
@@ -458,6 +497,7 @@ function! s:IMEEventStart()
         autocmd!
         autocmd InsertEnter * call s:OnInsertEnter()
         autocmd InsertLeave * call s:OnInsertLeave()
+        autocmd CursorMovedI * call s:OnCursorMovedI()
         if exists('##CompleteDone')
             autocmd CompleteDone * call s:OnCompleteDone()
         endif
@@ -471,21 +511,42 @@ endfunction
 
 function! s:init()
     let s:started = 0
+    let s:enabled = 0
     let s:seamless_positions = []
     let s:start_column = 1
     let s:all_keys = '^[0-9a-z]$'
     let s:input_keys = '^[a-z]$'
 endfunction
 
-function! s:IME_update()
-    if g:ZFVimIM_dbIndex < len(g:ZFVimIM_db)
-        let b:keymap_name=g:ZFVimIM_db[g:ZFVimIM_dbIndex]['name']
+function! ZFVimIME_IMEName()
+    if ZFVimIME_started() && g:ZFVimIM_dbIndex < len(g:ZFVimIM_db)
+        return g:ZFVimIM_db[g:ZFVimIM_dbIndex]['name']
     else
-        let b:keymap_name='ZFVimIM'
+        return ''
+    endif
+endfunction
+
+function! ZFVimIME_IMEStatusline()
+    let name = ZFVimIME_IMEName()
+    if empty(name)
+        return ''
+    else
+        return get(g:, 'ZFVimIME_IMEStatus_tagL', ' <') . name . get(g:, 'ZFVimIME_IMEStatus_tagR', '> ')
+    endif
+endfunction
+
+function! s:fixIMState()
+    if mode() == 'i'
+        " :h i_CTRL-^
+        call feedkeys(nr2char(30), 'nt')
+        if &iminsert != ZFVimIME_started()
+            call feedkeys(nr2char(30), 'nt')
+        endif
     endif
 endfunction
 
 function! s:IME_start()
+    let &iminsert = 1
     let cloudInitMode = get(g:, 'ZFVimIM_cloudInitMode', '')
     let g:ZFVimIM_cloudInitMode = 'preferSync'
     call ZFVimIME_init()
@@ -494,38 +555,81 @@ function! s:IME_start()
     call s:vimrcSave()
     call s:vimrcSetup()
     call s:setupKeymap()
-    call s:IME_update()
-    let b:ZFVimIME_started = 1
+    let b:keymap_name = ZFVimIME_IMEName()
 
     let s:seamless_positions = getpos('.')
+    call s:fixIMState()
+
+    let s:enabled = 1
+    let b:ZFVimIME_enabled = 1
+    doautocmd User ZFVimIM_event_OnEnable
 endfunction
 
 function! s:IME_stop()
+    let &iminsert = 0
     lmapclear
     call s:vimrcRestore()
     call s:resetState()
-    if exists('b:ZFVimIME_started')
-        unlet b:ZFVimIME_started
+    call s:fixIMState()
+
+    let s:enabled = 0
+    if exists('b:ZFVimIME_enabled')
+        unlet b:ZFVimIME_enabled
+    endif
+    doautocmd User ZFVimIM_event_OnDisable
+endfunction
+
+function! s:IME_enableStateUpdate(...)
+    if get(g:, 'ZFVimIME_enableOnInsertOnly', 1)
+        let desired = get(a:, 1, -1)
+        if desired == 0
+            let enabled = 0
+        elseif desired == 1
+            let enabled = s:started
+        else
+            let enabled = (s:started && match(mode(), 'i') >= 0)
+        endif
+    else
+        let enabled = s:started
+    endif
+    if enabled != s:enabled
+        if enabled
+            call s:IME_start()
+        else
+            call s:IME_stop()
+        endif
     endif
 endfunction
 
+augroup ZFVimIME_impl_enabledStateUpdate_augroup
+    autocmd!
+    autocmd InsertEnter * call s:IME_enableStateUpdate(1)
+    autocmd InsertLeave * call s:IME_enableStateUpdate(0)
+augroup END
+
 function! s:IME_syncBuffer_delay(...)
-    if get(b:, 'ZFVimIME_started', 0) != s:started
-                \ || &iminsert != s:started
-        if s:started
-            call ZFVimIME_start()
-        else
-            let s:started = 1
-            call ZFVimIME_stop()
-        endif
-        call s:fixIMState()
+    if !get(g:, 'ZFVimIME_syncBuffer', 1)
+        return
     endif
-    call s:IME_update()
-    redraw!
+    if get(b:, 'ZFVimIME_enabled', 0) != s:enabled
+                \ || &iminsert != s:enabled
+        if s:enabled
+            call s:IME_stop()
+            call s:IME_start()
+        else
+            call s:IME_start()
+            call s:IME_stop()
+        endif
+    endif
+    let b:keymap_name = ZFVimIME_IMEName()
+    call ZFVimIME_redraw()
 endfunction
 function! s:IME_syncBuffer(...)
-    if get(b:, 'ZFVimIME_started', 0) != s:started
-                \ || &iminsert != s:started
+    if !get(g:, 'ZFVimIME_syncBuffer', 1)
+        return
+    endif
+    if get(b:, 'ZFVimIME_enabled', 0) != s:enabled
+                \ || &iminsert != s:enabled
         if has('timers')
             call timer_start(get(a:, 1, 0), function('s:IME_syncBuffer_delay'))
         else
@@ -579,32 +683,32 @@ function! s:setupKeymap()
 
     for c in split('abcdefghijklmnopqrstuvwxyz', '\zs')
         let mapped[c] = 1
-        execute 'lnoremap <buffer><expr> ' . c . ' ZFVimIME_input("' . substitute(c, '"', '\\"', 'g') . '")'
+        execute 'lnoremap <buffer><expr> ' . c . ' ZFVimIME_input("' . escape(c, '"\') . '")'
     endfor
 
     for c in get(g:, 'ZFVimIM_key_pageUp', ['-'])
         if c !~ s:all_keys
             let mapped[c] = 1
-            execute 'lnoremap <buffer><expr> ' . c . ' ZFVimIME_pageUp("' . substitute(c, '"', '\\"', 'g') . '")'
+            execute 'lnoremap <buffer><expr> ' . c . ' ZFVimIME_pageUp("' . escape(c, '"\') . '")'
         endif
     endfor
     for c in get(g:, 'ZFVimIM_key_pageDown', ['='])
         if c !~ s:all_keys
             let mapped[c] = 1
-            execute 'lnoremap <buffer><expr> ' . c . ' ZFVimIME_pageDown("' . substitute(c, '"', '\\"', 'g') . '")'
+            execute 'lnoremap <buffer><expr> ' . c . ' ZFVimIME_pageDown("' . escape(c, '"\') . '")'
         endif
     endfor
 
     for c in get(g:, 'ZFVimIM_key_chooseL', ['['])
         if c !~ s:all_keys
             let mapped[c] = 1
-            execute 'lnoremap <buffer><expr> ' . c . ' ZFVimIME_chooseL("' . substitute(c, '"', '\\"', 'g') . '")'
+            execute 'lnoremap <buffer><expr> ' . c . ' ZFVimIME_chooseL("' . escape(c, '"\') . '")'
         endif
     endfor
     for c in get(g:, 'ZFVimIM_key_chooseR', [']'])
         if c !~ s:all_keys
             let mapped[c] = 1
-            execute 'lnoremap <buffer><expr> ' . c . ' ZFVimIME_chooseR("' . substitute(c, '"', '\\"', 'g') . '")'
+            execute 'lnoremap <buffer><expr> ' . c . ' ZFVimIME_chooseR("' . escape(c, '"\') . '")'
         endif
     endfor
 
@@ -616,28 +720,28 @@ function! s:setupKeymap()
     for c in get(g:, 'ZFVimIM_key_backspace', ['<bs>'])
         if c !~ s:all_keys
             let mapped[c] = 1
-            execute 'lnoremap <buffer><expr> ' . c . ' ZFVimIME_backspace("' . substitute(c, '"', '\\"', 'g') . '")'
+            execute 'lnoremap <buffer><expr> ' . c . ' ZFVimIME_backspace("' . escape(c, '"\') . '")'
         endif
     endfor
 
     for c in get(g:, 'ZFVimIM_key_esc', ['<esc>'])
         if c !~ s:all_keys
             let mapped[c] = 1
-            execute 'lnoremap <buffer><expr> ' . c . ' ZFVimIME_esc("' . substitute(c, '"', '\\"', 'g') . '")'
+            execute 'lnoremap <buffer><expr> ' . c . ' ZFVimIME_esc("' . escape(c, '"\') . '")'
         endif
     endfor
 
     for c in get(g:, 'ZFVimIM_key_enter', ['<cr>'])
         if c !~ s:all_keys
             let mapped[c] = 1
-            execute 'lnoremap <buffer><expr> ' . c . ' ZFVimIME_enter("' . substitute(c, '"', '\\"', 'g') . '")'
+            execute 'lnoremap <buffer><expr> ' . c . ' ZFVimIME_enter("' . escape(c, '"\') . '")'
         endif
     endfor
 
     for c in get(g:, 'ZFVimIM_key_space', ['<space>'])
         if c !~ s:all_keys
             let mapped[c] = 1
-            execute 'lnoremap <buffer><expr> ' . c . ' ZFVimIME_space("' . substitute(c, '"', '\\"', 'g') . '")'
+            execute 'lnoremap <buffer><expr> ' . c . ' ZFVimIME_space("' . escape(c, '"\') . '")'
         endif
     endfor
 
@@ -652,7 +756,7 @@ function! s:setupKeymap()
         for c in cs
             if c !~ s:all_keys
                 let mapped[c] = 1
-                execute 'lnoremap <buffer><expr> ' . c . ' ZFVimIME_label(' . (iCandidate + 2) . ', "' . substitute(c, '"', '\\"', 'g') . '")'
+                execute 'lnoremap <buffer><expr> ' . c . ' ZFVimIME_label(' . (iCandidate + 2) . ', "' . escape(c, '"\') . '")'
             endif
         endfor
         let iCandidate += 1
@@ -660,7 +764,7 @@ function! s:setupKeymap()
 
     for c in keys(g:ZFVimIM_symbolMap)
         if !exists("mapped[c]")
-            execute 'lnoremap <buffer><expr> ' . c . ' ZFVimIME_symbol("' . substitute(c, '"', '\\"', 'g') . '")'
+            execute 'lnoremap <buffer><expr> ' . c . ' ZFVimIME_symbol("' . escape(c, '"\') . '")'
         endif
     endfor
 endfunction
@@ -670,6 +774,7 @@ function! s:resetState()
     let s:keyboard = ''
     let s:userWord = []
     let s:confirmFlag = 0
+    let s:hasInput = 0
 endfunction
 
 function! s:resetAfterInsert()
@@ -681,8 +786,13 @@ endfunction
 
 function! s:curPage()
     if !empty(s:match_list) && &pumheight > 0
-        execute 'let results = s:match_list[' . (s:page * &pumheight) . ':' . ((s:page+1) * &pumheight - 1) . ']'
-        return results
+        if s:completeItemAvailable && get(g:, 'ZFVimIM_freeScroll', 0)
+            execute 'let results = s:match_list[' . (s:page * &pumheight) . ':-1]'
+            return results
+        else
+            execute 'let results = s:match_list[' . (s:page * &pumheight) . ':' . ((s:page+1) * &pumheight - 1) . ']'
+            return results
+        endif
     else
         return []
     endif
@@ -699,7 +809,7 @@ function! s:getSeamless(cursor_positions)
     let seamless_column = s:seamless_positions[2]
     let len = a:cursor_positions[2] - seamless_column
     let snip = strpart(current_line, seamless_column - 1, len)
-    if len(snip) <= 0
+    if len(snip) < 0
         let s:seamless_positions = []
         return -1
     endif
@@ -712,27 +822,27 @@ function! s:getSeamless(cursor_positions)
 endfunction
 
 function! s:hasLeftChar()
-    let key = 0
     let before = getline('.')[col('.')-2]
     if before =~ '\s' || empty(before)
-        let key = 0
+        return 0
     elseif before =~# s:input_keys
-        let key = 1
+        return 1
     endif
-    return key
 endfunction
 
 function! s:omnifunc(start, keyboard)
     let s:enter_to_confirm = 1
+    let s:hasInput = 1
     if a:start
         let cursor_positions = getpos('.')
         let start_column = cursor_positions[2]
         let current_line = getline(cursor_positions[1])
-        let current_line = substitute(current_line, '\\[a-z\\]', '  ', 'g')
         let seamless_column = s:getSeamless(cursor_positions)
         if seamless_column <= 0
-            let s:seamless_positions = []
             let seamless_column = 1
+        endif
+        if start_column <= seamless_column
+            return -3
         endif
         while start_column > seamless_column && current_line[(start_column-1) - 1] =~# s:input_keys
             let start_column -= 1
@@ -775,10 +885,19 @@ function! s:popupMenuList(complete)
     for item in a:complete
         " :h complete-items
         let complete_items = {}
-        let labelstring = (label == 10 ? '0' : label)
-        let labelstring = printf('%s ', labelstring)
+        if get(g:, 'ZFVimIM_freeScroll', 0)
+            let labelstring = printf('%2d', label == 10 ? 0 : label)
+        else
+            if label >= 1 && label <= 9
+                let labelstring = label
+            elseif label == 10
+                let labelstring = '0'
+            else
+                let labelstring = '?'
+            endif
+        endif
         let left = strpart(s:keyboard, item['len'])
-        let complete_items['abbr'] = labelstring . item['word'] . left
+        let complete_items['abbr'] = labelstring . ' ' . item['word'] . ' ' . left
         let complete_items['menu'] = ''
         if get(g:, 'ZFVimIM_showKeyHint', 1)
             if item['type'] == 'sentence' && !empty(get(item, 'sentenceList'))
@@ -799,25 +918,26 @@ function! s:popupMenuList(complete)
 
         let db = ZFVimIM_dbForId(item['dbId'])
         if type(get(db, 'menuLabel', 0)) == type(0)
-            if item['dbId'] != g:ZFVimIM_db[g:ZFVimIM_dbIndex]['dbId']
+            if get(g:, 'ZFVimIM_showCrossDbHint', 1)
+                        \ && item['dbId'] != g:ZFVimIM_db[g:ZFVimIM_dbIndex]['dbId']
                 let complete_items['menu'] .= '  <' . db['name'] . '>'
             endif
         else
             if type(db['menuLabel']) == type('')
                 let complete_items['menu'] .= db['menuLabel']
             elseif ZFVimIM_funcCallable(db['menuLabel'])
-                let complete_items['menu'] .= ZFVimIM_funcCallable(db['menuLabel'], [item])
+                let complete_items['menu'] .= ZFVimIM_funcCall(db['menuLabel'], [item])
             endif
         endif
 
         if get(g:, 'ZFVimIME_DEBUG', 0)
-            let complete_items['menu'] .= '  (' . item['type'] . ') ' . strpart(item['key'], 0, item['len'])
+            let complete_items['menu'] .= printf('  (%s) <%s> %s', item['type'], db['name'], strpart(item['key'], 0, item['len']))
         endif
 
         let complete_items['dup'] = 1
         let complete_items['word'] = item['word'] . left
         if s:completeItemAvailable
-            let complete_items['info'] = json_encode(item)
+            let complete_items['info'] = ZFVimIM_json_encode(item)
         endif
         call add(popup_list, complete_items)
         let label += 1
@@ -829,11 +949,28 @@ function! s:popupMenuList(complete)
 endfunction
 
 function! s:OnInsertEnter()
+    if get(g:, 'ZFJobTimerFallbackCursorMoving', 0) > 0
+        return
+    endif
     let s:seamless_positions = getpos('.')
     let s:enter_to_confirm = 0
 endfunction
 function! s:OnInsertLeave()
+    if get(g:, 'ZFJobTimerFallbackCursorMoving', 0) > 0
+        return
+    endif
     call s:resetState()
+endfunction
+function! s:OnCursorMovedI()
+    if get(g:, 'ZFJobTimerFallbackCursorMoving', 0) > 0
+        return
+    endif
+    if s:hasInput
+        let s:hasInput = 0
+    else
+        let s:seamless_positions = getpos('.')
+        let s:enter_to_confirm = 0
+    endif
 endfunction
 
 
@@ -842,7 +979,7 @@ function! s:addWord(dbId, key, word)
     if dbIndex < 0
         return
     endif
-    call ZFVimIM_wordAdd(a:word, a:key, g:ZFVimIM_db[dbIndex])
+    call ZFVimIM_wordAdd(g:ZFVimIM_db[dbIndex], a:word, a:key)
 
     let g:ZFVimIM_event_OnAddWord = {
                 \   'dbId' : a:dbId,
@@ -852,9 +989,8 @@ function! s:addWord(dbId, key, word)
     doautocmd User ZFVimIM_event_OnAddWord
 endfunction
 
-let s:completeItemAvailable = (exists('v:completed_item') && exists('*json_encode'))
+let s:completeItemAvailable = (exists('v:completed_item') && ZFVimIM_json_available())
 let s:confirmFlag = 0
-let s:userWord=[]
 function! s:OnCompleteDone()
     if !s:confirmFlag
         return
@@ -864,7 +1000,7 @@ function! s:OnCompleteDone()
         return
     endif
     try
-        let item = json_decode(v:completed_item['info'])
+        let item = ZFVimIM_json_decode(v:completed_item['info'])
     catch
         let item = ''
     endtry
@@ -872,18 +1008,28 @@ function! s:OnCompleteDone()
         let s:userWord = []
         return
     endif
+    call s:didChoose(item)
+endfunction
 
-    if item['type'] == 'sentence'
-        for word in get(item, 'sentenceList', [])
-            call s:addWord(item['dbId'], word['key'], word['word'])
+let s:userWord=[]
+function! s:didChoose(item)
+    let g:ZFVimIM_choosedWord = a:item
+    doautocmd User ZFVimIM_event_OnCompleteDone
+    unlet g:ZFVimIM_choosedWord
+
+    let s:seamless_positions[2] = s:start_column + len(a:item['word'])
+
+    if a:item['type'] == 'sentence'
+        for word in get(a:item, 'sentenceList', [])
+            call s:addWord(a:item['dbId'], word['key'], word['word'])
         endfor
         let s:userWord = []
         return
     endif
 
-    call add(s:userWord, item)
+    call add(s:userWord, a:item)
 
-    if item['len'] == len(s:keyboard)
+    if a:item['len'] == len(s:keyboard)
         call s:addWordFromUserWord()
         let s:userWord = []
     endif
@@ -893,12 +1039,13 @@ function! s:addWordFromUserWord()
         let sentenceKey = ''
         let sentenceWord = ''
         let hasOtherDb = 0
-        let dbIdCur = g:ZFVimIM_db[g:ZFVimIM_dbIndex]['dbId']
+        let dbIdPrev = ''
         for word in s:userWord
             call s:addWord(word['dbId'], word['key'], word['word'])
 
             if !hasOtherDb
-                let hasOtherDb = (dbIdCur != word['dbId'])
+                let hasOtherDb = (dbIdPrev != '' && dbIdPrev != word['dbId'])
+                let dbIdPrev = word['dbId']
             endif
             let sentenceKey .= word['key']
             let sentenceWord .= word['word']

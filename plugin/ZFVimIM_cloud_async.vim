@@ -7,7 +7,7 @@ endif
 " 1 : upload immediately
 " > 1 : delay miliseconds and upload
 if !exists('g:ZFVimIM_cloudAsync_enable')
-    let g:ZFVimIM_cloudAsync_enable=5000
+    let g:ZFVimIM_cloudAsync_enable=30000
 endif
 if !exists('g:ZFVimIM_cloudAsync_timeout')
     let g:ZFVimIM_cloudAsync_timeout=60000
@@ -31,10 +31,11 @@ endif
 
 " ============================================================
 function! ZFVimIM_cloudAsyncAvailable()
-    if !exists('s:uploadAsyncAvailableCache')
-        let s:uploadAsyncAvailableCache = exists('*ZFJobAvailable') && ZFJobAvailable()
+    if !exists('s:cloudAsyncAvailable')
+        let s:cloudAsyncAvailable = (exists('*ZFJobAvailable') && ZFJobAvailable())
+                    \ || (exists('*ZFJobTimerAvailable') && ZFJobTimerAvailable() && get(g:, 'ZFVimIM_cloudAsync_jobFallback', 0))
     endif
-    return s:uploadAsyncAvailableCache
+    return s:cloudAsyncAvailable
 endfunction
 
 
@@ -239,7 +240,7 @@ function! s:uploadAsync(cloudOption, mode)
                 \   'dbMapNew' : {},
                 \   'dbEdit' : [],
                 \ }
-    call mkdir(task['cachePath'], 'p')
+    silent! call mkdir(task['cachePath'], 'p')
     let s:UA_taskMap[db['dbId']] = task
     let task['dbEdit'] = db['dbEdit']
     let db['dbEdit'] = []
@@ -315,7 +316,7 @@ function! s:uploadAsync(cloudOption, mode)
                         \ }])
 
             if g:ZFVimIM_cloudAsync_autoCleanup > 0 && ZFVimIM_cloud_gitInfoSupplied(a:cloudOption)
-                let dbCleanupCmd = ZFVimIM_cloud_dbCleanupCmd(a:cloudOption, task['cachePath'] . 'dbCleanupCache')
+                let dbCleanupCmd = ZFVimIM_cloud_dbCleanupCmd(a:cloudOption, task['cachePath'] . '/dbCleanupCache')
                 if !empty(dbCleanupCmd)
                     call add(groupJobOption['jobList'], [{
                                 \   'jobCmd' : ZFVimIM_cloud_dbCleanupCheckCmd(a:cloudOption),
@@ -467,11 +468,8 @@ function! s:UA_dbSaveOnEnter(dbId, jobStatus)
     endfor
 
     " prepare to save
-    call ZFVimIM_DEBUG_profileStart('dbSaveDBEditEncode')
-    let dbEditJson = json_encode(task['dbEdit'])
-    call ZFVimIM_DEBUG_profileStop()
     call ZFVimIM_DEBUG_profileStart('dbSaveDBEditWrite')
-    call writefile([dbEditJson], task['cachePath'] . '/dbSaveCache')
+    call ZFVimIM_cloud_dbEditToFile(task['cloudOption'], task['cachePath'] . '/dbSaveCache', task['dbEdit'])
     call ZFVimIM_DEBUG_profileStop()
 endfunction
 function! s:UA_dbSaveOnOutput(dbId, jobStatus, textList, type)

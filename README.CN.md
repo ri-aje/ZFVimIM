@@ -6,23 +6,38 @@
     * [纯本地词库](#纯本地词库)
     * [云词库](#云词库)
 * [使用](#使用)
+* [一些使用技巧](#一些使用技巧)
 * [疑难杂症](#疑难杂症)
 
 <!-- vim-markdown-toc -->
 
 # 简介
 
-vim 上的中文输入法, 特色:
+vim 上的输入法, 特色:
 
 * 支持自动 pull/push 词库到 gayhub 哦不 github
 * 支持异步调用外部云输入法 (目前支持百度输入法)
 * 动态组词, 动态词频, 长句输入
-* 支持挂各种大词库, 支持多词库混输
+* 支持挂各种大词库, 支持多词库混输, 中英日甚至颜文字都行, 只要能按格式提供词库
 * 辣鸡环境可以回退到纯 vim script 版本, 最低支持 vim 7.3,
     当然也支持无网络纯本地使用
 
 
+(防杠补丁) Why not 系统输入法:
+
+* vim 的一大优势就是 ssh 到处都能用, 至少大多数 ssh 环境用系统输入法都很蛋疼
+* `inoremap jk <esc>` 流派的福音
+
+
+词库同步及长句输入:
+
 ![](https://raw.githubusercontent.com/ZSaberLv0/ZFVimIM/master/preview.gif)
+
+
+多词库混输: (不卡, gif 图的问题, 懒得重新搞了 `(- -b)`)
+
+![](https://raw.githubusercontent.com/ZSaberLv0/ZFVimIM/master/preview_crossdb.gif)
+
 
 如果你喜欢本插件, 给开发者[买个煎饼补补脑](https://github.com/ZSaberLv0/ZSaberLv0)
 
@@ -86,8 +101,19 @@ vim 上的中文输入法, 特色:
 1. 参照 [db samples](https://github.com/ZSaberLv0/ZFVimIM#db-samples) 创建自己的词库,
     或 fork 以下词库:
 
-    * 拼音: [ZSaberLv0/ZFVimIM_pinyin_base](https://github.com/ZSaberLv0/ZFVimIM_pinyin_base)
+    * 拼音 (单字词库): [ZSaberLv0/ZFVimIM_pinyin_base](https://github.com/ZSaberLv0/ZFVimIM_pinyin_base)
+        : 仅包含单字, 无词组, 由于词库和个人使用有关, 本插件的自动组词算法毕竟比不上专业的输入法,
+        用大词库容易一堆废词, 因此比较建议从单字词库慢慢组词使用
+    * 拼音 (大词库): [ZSaberLv0/ZFVimIM_pinyin_huge](https://github.com/ZSaberLv0/ZFVimIM_pinyin_huge)
+        : 大词库, 可能包含一堆废词, 主要丢这边给各位测测使用体验和性能
+    * 拼音: [ZSaberLv0/ZFVimIM_pinyin](https://github.com/ZSaberLv0/ZFVimIM_pinyin)
+        : 个人在用词库, 时不时 `git push --force`
     * 五笔: [ZSaberLv0/ZFVimIM_wubi_base](https://github.com/ZSaberLv0/ZFVimIM_wubi_base)
+        : [ywvim](https://github.com/vim-scripts/ywvim) 转换来的词库, 我对五笔不熟, 各位自行尝试
+    * 英语: [ZSaberLv0/ZFVimIM_english_base](https://github.com/ZSaberLv0/ZFVimIM_english_base)
+        : 一些基本的英语单词
+    * 日语: [ZSaberLv0/ZFVimIM_english_base](https://github.com/ZSaberLv0/ZFVimIM_english_base)
+        : 一些基本的日语单词
 
 1. 到 [access tokens](https://github.com/settings/tokens) 配置一个合适的 token,
     并确保对词库 repo 有 push 权限 (`Select scopes` 中勾选 `repo`)
@@ -110,8 +136,9 @@ vim 上的中文输入法, 特色:
     Plugin 'YourUserName/ZFVimIM_pinyin_base' " 你的词库
     Plugin 'ZSaberLv0/ZFVimIM_openapi' " 可选, 百度云输入法
 
-    " 国内辣鸡网络, 可以尝试用这个镜像, 与 github 互通
-    Plugin 'https://hub.fastgit.org/YourUserName/ZFVimIM_pinyin_base' " 你的词库
+    " 国内辣鸡网络, 可以尝试用这个镜像, 与 github 直接互通
+    " 或者干脆用 gitee 等国内站点
+    Plugin 'https://hub.fastgit.xyz/YourUserName/ZFVimIM_pinyin_base' " 你的词库
     ```
 
 
@@ -127,10 +154,63 @@ vim 上的中文输入法, 特色:
     贫穷码农在线乞讨 `_(:з」∠)_`
 
 
+# 一些使用技巧
+
+* 可以在 `:h 'statusline'` 展示当前 IME 状态
+
+    ```
+    let &statusline='%{ZFVimIME_IMEStatusline()}'.&statusline
+    ```
+
+* 命令行和搜索中没法直接使用, 可以利用 `:h command-line-window`
+
+    ```
+    function! ZF_Setting_cmdEdit()
+        let cmdtype = getcmdtype()
+        if cmdtype != ':' && cmdtype != '/'
+            return ''
+        endif
+        call feedkeys("\<c-c>q" . cmdtype . 'k0' . (getcmdpos() - 1) . 'li', 'nt')
+        return ''
+    endfunction
+    cnoremap <silent><expr> ;; ZF_Setting_cmdEdit()
+    ```
+
+    用法: 在命令行输入过程中, 按 `;;` 进入 `command-line-window`, 在这里面可以用本插件进行输入
+
+* `:terminal` 中没法使用, 也可以利用 `:h command-line-window`
+
+    ```
+    if has('terminal') || has('nvim')
+        function! PassToTerm(text)
+            let @t = a:text
+            if has('nvim')
+                call feedkeys('"tpa', 'nt')
+            else
+                call feedkeys("a\<c-w>\"t", 'nt')
+            endif
+            redraw!
+        endfunction
+        command! -nargs=* PassToTerm :call PassToTerm(<q-args>)
+        tnoremap ;; <c-\><c-n>q:a:PassToTerm<space>
+    endif
+    ```
+
+    用法: 在 `:terminal` window 的 `Insert-mode` 下, 按 `;;` 进入 `command-line-window` 用本插件进行输入
+
+
 # 疑难杂症
 
 * 卡顿/加载慢? 请先检查 `call ZFVimIM_DEBUG_checkHealth()`,
     需要 `ZFJobAvailable: 1` 以及 `python: 1`
+
+    * 1M 左右的词库正常配置的话应该几秒内能加载完成
+    * 10M 左右的大词库大约需要 5~30秒
+    * Windows 或 Cygwin 上相比于 Linux/Mac 可能会尤其慢, 建议排查:
+        * 看看是否有 360 等杀毒软件, 词库加载涉及很多 job 多线程操作,
+            杀毒软件可能每次都会扫描引起严重拖慢, 亲测加信任也无效
+        * 检查 `PATH` 是否有过多内容
+
 * 发现各种诡异现象, 请先按如下步骤排查:
 
     1. 本插件依赖于 `lmap` 和 `omnifunc`,

@@ -40,7 +40,16 @@ Outstanding features / why another remake:
     * auto disable and re-enable complete engines when using input method
     * sync input method state acrossing buffers
 
+
+Why VimIM? Why not system IME?
+
+* it's a pain to input CJK in ssh env
+* I love `inoremap jk <esc>` `:)`
+
+
 ![](https://raw.githubusercontent.com/ZSaberLv0/ZFVimIM/master/preview.gif)
+
+![](https://raw.githubusercontent.com/ZSaberLv0/ZFVimIM/master/preview_crossdb.gif)
 
 if you like my work, [check here](https://github.com/ZSaberLv0?utf8=%E2%9C%93&tab=repositories&q=ZFVim) for a list of my vim plugins,
 or [buy me a coffee](https://github.com/ZSaberLv0/ZSaberLv0)
@@ -132,6 +141,12 @@ or [buy me a coffee](https://github.com/ZSaberLv0/ZSaberLv0)
 
 ## some tips
 
+* you may want to add a IME status tip to your `:h 'statusline'`
+
+    ```
+    let &statusline='%{ZFVimIME_IMEStatusline()}'.&statusline
+    ```
+
 * if it's hard to support async mode, you may also:
 
     * pull and push manually by `:call ZFVimIM_download()` and `:call ZFVimIM_upload()`
@@ -221,7 +236,7 @@ or [buy me a coffee](https://github.com/ZSaberLv0/ZSaberLv0)
     * if you want to change this setting at runtime,
         you should use `call ZFVimIME_stop() | call ZFVimIME_start()`
         to restart to take effect,
-        or, add autocmd to `ZFVimIM_event_OnStart`
+        or, add autocmd to `ZFVimIM_event_OnEnable`
         to setup this value
 
     * it's recommended to add these configs to make vim recognize chinese chars
@@ -272,6 +287,9 @@ or [buy me a coffee](https://github.com/ZSaberLv0/ZSaberLv0)
         ```
 
     * `ZFJobAvailable()` returned 1 (i.e. async mode available)
+        * we have bundled a default fallback for job,
+            which may cause some unexpected lag,
+            you may enable it by `let g:ZFVimIM_cloudAsync_jobFallback = 1`
     * `g:ZFVimIM_cloudAsync_autoCleanup` greater than 0
     * your `git rev-list --count HEAD` exceeds `g:ZFVimIM_cloudAsync_autoCleanup`
 
@@ -296,15 +314,15 @@ or [buy me a coffee](https://github.com/ZSaberLv0/ZSaberLv0)
     start or stop, must called during Insert Mode, as
     `<c-r>=ZFVimIME_start()<cr>`
 
-* `:IMAdd word key` or `ZFVimIM_wordAdd(word, key)`
+* `:IMAdd word key` or `ZFVimIM_wordAdd(db, word, key)`
 
     manually add word
 
-* `:IMRemove word [key]` or `ZFVimIM_wordRemove(word [, key])`
+* `:IMRemove word [key]` or `ZFVimIM_wordRemove(db, word [, key])`
 
     manually remove word
 
-* `:IMReorder word [key]` or `ZFVimIM_wordReorder(word [, key])`
+* `:IMReorder word [key]` or `ZFVimIM_wordReorder(db, word [, key])`
 
     manually reorder word priority,
     by reducing it's input history count to a proper value
@@ -335,7 +353,7 @@ or [buy me a coffee](https://github.com/ZSaberLv0/ZSaberLv0)
             'len' : 'match count in key',
             'key' : 'matched full key',
             'word' : 'matched word',
-            'type' : 'type of completion: sentence/match/predict',
+            'type' : 'type of completion: sentence/match/predict/subMatch',
             'sentenceList' : [ // (optional) for sentence type only, list of word that complete as sentence
               {
                 'key' : '',
@@ -361,9 +379,15 @@ or [buy me a coffee](https://github.com/ZSaberLv0/ZSaberLv0)
     ```
     {
       'name' : '(required) name of your db',
-      'priority' : '(optional) 100 by default, smaller value means higher priority',
+      'priority' : '(optional) priority of the db, smaller value has higher priority, 100 by default',
       'switchable' : '(optional) 1 by default, when off, won't be enabled by ZFVimIME_keymap_next_n() series',
       'editable' : '(optional) 1 by default, when off, no dbEdit would applied',
+      'crossable' : '(optional) g:ZFVimIM_crossable by default, whether to show result when inputing in other db',
+                    // 0 : disable
+                    // 1 : show only when full match
+                    // 2 : show and allow predict
+                    // 3 : show and allow predict and sub match
+      'crossDbLimit' : '(optional) g:ZFVimIM_crossDbLimit by default, when crossable, limit max result to this num',
       'dbCallback' : '(optional) func(key, option), see ZFVimIM_complete',
                      // when dbCallback supplied, words would be fetched from this callback instead
       'menuLabel' : '(optional) string or function(item), when not empty, show label after key hint',
@@ -440,7 +464,12 @@ or [buy me a coffee](https://github.com/ZSaberLv0/ZSaberLv0)
 * [ZSaberLv0/ZFVimIM_wubi_base](https://github.com/ZSaberLv0/ZFVimIM_wubi_base) :
     wubi converted from [ywvim](https://github.com/vim-scripts/ywvim),
     I'm not familiar with wubi,
-    just put it here in case you want to test
+    just put it here in case you want to try
+* [ZSaberLv0/ZFVimIM_english_base](https://github.com/ZSaberLv0/ZFVimIM_english_base) :
+    english repo that contain common words
+* [ZSaberLv0/ZFVimIM_japanese_base](https://github.com/ZSaberLv0/ZFVimIM_japanese_base) :
+    japanese repo that contain common words
+
 * [ZSaberLv0/ZFVimIM_pinyin](https://github.com/ZSaberLv0/ZFVimIM_pinyin) :
     pinyin repo which I personally used,
     update frequently
@@ -495,6 +524,8 @@ or [buy me a coffee](https://github.com/ZSaberLv0/ZSaberLv0)
         cnoremap <silent><expr> ;; ZF_Setting_cmdEdit()
         ```
 
+        to use it: press `;;` while editing in `Command-line`
+
 * Q: How to use in `:terminal`?
 
     A: since `terminal` does not support `omnifunc`,
@@ -503,18 +534,22 @@ or [buy me a coffee](https://github.com/ZSaberLv0/ZSaberLv0)
     a workaround by `command-line-window`:
 
     ```
-    function! PassToTerm(text)
-        let @t = a:text
-        if has('nvim')
-            call feedkeys('"tpa', 't')
-        else
-            call feedkeys("a\<c-w>\"t", 't')
-        endif
-        redraw!
-    endfunction
-    command! -nargs=* PassToTerm :call PassToTerm(<q-args>)
-    tnoremap ;; <c-\><c-n>q:a:PassToTerm<space>
+    if has('terminal') || has('nvim')
+        function! PassToTerm(text)
+            let @t = a:text
+            if has('nvim')
+                call feedkeys('"tpa', 'nt')
+            else
+                call feedkeys("a\<c-w>\"t", 'nt')
+            endif
+            redraw!
+        endfunction
+        command! -nargs=* PassToTerm :call PassToTerm(<q-args>)
+        tnoremap ;; <c-\><c-n>q:a:PassToTerm<space>
+    endif
     ```
+
+    to use it: press `;;` while inside `:terminal` window's `Insert-mode`
 
 * Q: external db source?
 
