@@ -1,3 +1,6 @@
+if !get(g:, 'ZFVimIM_enable', 1)
+    finish
+endif
 
 function! ZFVimIM_DEBUG_checkHealth()
     redraw!
