@@ -38,9 +38,11 @@ endfunction
 function! ZFVimIM_uploadAllSync()
     call ZFVimIM_downloadAllAsyncCancel()
     call ZFVimIM_uploadAllAsyncCancel()
+    call ZFVimIM_cloud_lockAcquire()
     for cloudOption in g:ZFVimIM_cloudOption
         call ZFVimIM_uploadSync(cloudOption)
     endfor
+    call ZFVimIM_cloud_lockRelease()
 endfunction
 
 
@@ -175,6 +177,17 @@ endfunction
 " * download
 " * upload
 function! s:uploadSync(cloudOption, mode)
+    call ZFVimIM_cloud_lockAcquire()
+    if !ZFVimIM_cloud_lockAcquired()
+        call ZFVimIM_cloud_lockRelease()
+        redraw!
+        call s:cloudSyncLog(ZFVimIM_cloud_logInfo(a:cloudOption) . 'canceled: locked by other vim process')
+        return
+    endif
+    call s:uploadSyncImpl(a:cloudOption, a:mode)
+    call ZFVimIM_cloud_lockRelease()
+endfunction
+function! s:uploadSyncImpl(cloudOption, mode)
     call ZFVimIM_cloudLogClear()
 
     let localMode = (get(a:cloudOption, 'mode', '') == 'local')

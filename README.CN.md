@@ -39,7 +39,8 @@ vim 上的输入法, 特色:
 ![](https://raw.githubusercontent.com/ZSaberLv0/ZFVimIM/master/preview_crossdb.gif)
 
 
-如果你喜欢本插件, 给开发者[买个煎饼补补脑](https://github.com/ZSaberLv0/ZSaberLv0)
+如果你喜欢本插件, 给开发者[买个煎饼补补脑](https://github.com/ZSaberLv0/ZSaberLv0),
+或者看看其它[好玩的插件](https://github.com/ZSaberLv0?utf8=%E2%9C%93&tab=repositories&q=ZFVim)
 
 
 # 推荐配置
@@ -87,7 +88,11 @@ vim 上的输入法, 特色:
                     \   'dbCountFile' : '/YourDbCountFile', " 非必须, 词频文件, 相对 repoPath 的路径
                     \ })
     endfunction
-    autocmd User ZFVimIM_event_OnDbInit call s:myLocalDb()
+    if exists('*ZFVimIME_initFlag') && ZFVimIME_initFlag()
+        call s:myLocalDb()
+    else
+        autocmd User ZFVimIM_event_OnDbInit call s:myLocalDb()
+    endif
     ```
 
 
@@ -112,7 +117,7 @@ vim 上的输入法, 特色:
         : [ywvim](https://github.com/vim-scripts/ywvim) 转换来的词库, 我对五笔不熟, 各位自行尝试
     * 英语: [ZSaberLv0/ZFVimIM_english_base](https://github.com/ZSaberLv0/ZFVimIM_english_base)
         : 一些基本的英语单词
-    * 日语: [ZSaberLv0/ZFVimIM_english_base](https://github.com/ZSaberLv0/ZFVimIM_english_base)
+    * 日语: [ZSaberLv0/ZFVimIM_japanese_base](https://github.com/ZSaberLv0/ZFVimIM_japanese_base)
         : 一些基本的日语单词
 
 1. 到 [access tokens](https://github.com/settings/tokens) 配置一个合适的 token,

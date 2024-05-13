@@ -29,6 +29,14 @@ def dbWordIndex(wordList, word):
         return -1
 
 
+ZFVimIM_dbItemReorderThreshold = 1
+def dbItemReorderFunc(item1, item2):
+    if (item2['count'] - item1['count']) - ZFVimIM_dbItemReorderThreshold > 0:
+        return 1
+    elif (item1['count'] - item2['count']) - ZFVimIM_dbItemReorderThreshold > 0:
+        return -1
+    else:
+        return 0
 def dbItemReorder(dbItem):
     tmp = []
     i = 0
@@ -39,7 +47,11 @@ def dbItemReorder(dbItem):
             'count' : dbItem['countList'][i],
         })
         i += 1
-    tmp.sort(key = lambda e:e['count'], reverse = True)
+    if sys.version_info >= (3, 0):
+        import functools
+        tmp.sort(key = functools.cmp_to_key(dbItemReorderFunc))
+    else:
+        tmp.sort(cmp = dbItemReorderFunc)
     dbItem['wordList'] = []
     dbItem['countList'] = []
     for item in tmp:
@@ -76,14 +88,19 @@ def dbItemEncode(dbItem):
         dbItemEncoded += re.sub(ZFVimIM_KEY_S_SUB, ZFVimIM_KEY_SR_SUB,
                 re.sub(ZFVimIM_KEY_S_MAIN, ZFVimIM_KEY_SR_MAIN, dbItem['wordList'][i])
             )
-    for i in range(len(dbItem['countList'])):
-        if dbItem['countList'][i] <= 0:
+    iEnd = len(dbItem['countList']) - 1
+    while iEnd >= 0:
+        if dbItem['countList'][iEnd] > 0:
             break
+        iEnd -= 1
+    i = 0
+    while i <= iEnd:
         if i == 0:
             dbItemEncoded += ZFVimIM_KEY_S_MAIN
         else:
             dbItemEncoded += ZFVimIM_KEY_S_SUB
         dbItemEncoded += str(dbItem['countList'][i])
+        i += 1
     return dbItemEncoded
 
 

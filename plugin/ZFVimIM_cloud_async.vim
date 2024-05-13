@@ -49,9 +49,11 @@ function! ZFVimIM_downloadAsync(cloudOption)
 endfunction
 function! ZFVimIM_downloadAllAsync()
     call ZFVimIM_downloadAllAsyncCancel()
+    call ZFVimIM_cloud_lockAcquire()
     for cloudOption in g:ZFVimIM_cloudOption
         call ZFVimIM_downloadAsync(cloudOption)
     endfor
+    call ZFVimIM_cloud_lockRelease()
 endfunction
 function! ZFVimIM_downloadAllAsyncCancel()
     call s:UA_cancel()
@@ -70,16 +72,6 @@ function! ZFVimIM_uploadAllAsyncCancel()
     call s:UA_cancel()
 endfunction
 
-
-" ============================================================
-augroup ZFVimIM_cloud_async_augroup
-    autocmd!
-    autocmd User ZFVimIM_event_OnUpdateDb
-                \  if g:ZFVimIM_cloudAsync_enable > 0 && ZFVimIM_cloudAsyncAvailable()
-                \|     call s:autoUploadAsync()
-                \| endif
-    autocmd VimEnter * call s:UA_autoInit()
-augroup END
 
 " ============================================================
 " {
@@ -245,6 +237,13 @@ function! s:uploadAsync(cloudOption, mode)
     let task['dbEdit'] = db['dbEdit']
     let db['dbEdit'] = []
 
+    let dbLoadCmd = ZFVimIM_cloud_dbLoadCmd(a:cloudOption, task['cachePath'] . '/dbLoadCache')
+    if initOnly && empty(dbLoadCmd) && empty(db['dbMap'])
+        " load without python takes a long time,
+        " do not load during init
+        return
+    endif
+
     let groupJobOption = {
                 \   'jobList' : [],
                 \   'onExit' : ZFJobFunc(function('s:UA_onExit'), [db['dbId']]),
@@ -252,8 +251,12 @@ function! s:uploadAsync(cloudOption, mode)
                 \   'outputTo' : g:ZFVimIM_cloudAsync_outputTo,
                 \ }
 
+    " lock logic
+    " release on group job onExit
+    call ZFVimIM_cloud_lockAcquire()
+
     " download and load to vim
-    if !initOnly && !applyOnly
+    if !initOnly && !applyOnly && ZFVimIM_cloud_lockAcquired()
         call add(groupJobOption['jobList'], [{
                     \   'jobCmd' : ZFVimIM_cloud_dbDownloadCmd(a:cloudOption),
                     \   'onOutputFilter' : function('ZFVimIM_cloudLog_stripSensitiveForJob'),
@@ -262,13 +265,7 @@ function! s:uploadAsync(cloudOption, mode)
     endif
     " for performance, we only load if db is empty
     if empty(db['dbMap'])
-        let dbLoadCmd = ZFVimIM_cloud_dbLoadCmd(a:cloudOption, task['cachePath'] . '/dbLoadCache')
         if empty(dbLoadCmd)
-            if initOnly
-                " load without python takes a long time,
-                " do not load during init
-                return
-            endif
             call add(groupJobOption['jobList'], [{
                         \   'jobCmd' : ZFJobFunc(function('s:UA_dbLoadFallback'), [db['dbId']]),
                         \ }])
@@ -293,7 +290,7 @@ function! s:uploadAsync(cloudOption, mode)
     endif
 
     " save to file and upload
-    if !initOnly && !downloadOnly && !empty(task['dbEdit'])
+    if !initOnly && !downloadOnly && !empty(task['dbEdit']) && ZFVimIM_cloud_lockAcquired()
         let dbSaveCmd = ZFVimIM_cloud_dbSaveCmd(a:cloudOption, task['cachePath'] . '/dbSaveCache', task['cachePath'])
         if empty(dbSaveCmd)
             call add(groupJobOption['jobList'], [{
@@ -336,6 +333,7 @@ function! s:uploadAsync(cloudOption, mode)
         endif
     endif
 
+    " finally, start the job
     call s:cloudAsyncLog(ZFGroupJobStatus(task['jobId']), ZFVimIM_cloud_logInfo(a:cloudOption) . 'updating...')
     let task['jobId'] = ZFGroupJobStart(groupJobOption)
     if task['jobId'] == -1
@@ -564,7 +562,9 @@ function! s:UA_onExit(dbId, groupJobStatus, exitCode)
         " auto retry if not stopped by user
         if a:exitCode != g:ZFJOBSTOP
             let s:autoUploadAsyncRetryTimeInc = s:autoUploadAsyncRetryTimeInc * 2
-            call s:autoUploadAsync()
+            if !empty(db['dbEdit'])
+                call s:autoUploadAsync()
+            endif
         endif
         break
     endwhile
@@ -576,9 +576,41 @@ function! s:UA_onExit(dbId, groupJobStatus, exitCode)
         endif
     endif
     call ZFJobOutputCleanup(a:groupJobStatus)
+    call s:UA_lockCleanupJob(a:groupJobStatus)
 
     if !empty(task) && task['mode'] == 'init' && get(task['cloudOption'], 'mode', '') != 'local'
         call s:uploadAsync(task['cloudOption'], 'download')
     endif
 endfunction
+
+" ============================================================
+" lock logic
+function! s:UA_lockCleanupJob(groupJobStatus)
+    let lockAcquired = ZFVimIM_cloud_lockAcquired()
+    call ZFVimIM_cloud_lockRelease()
+    if !lockAcquired
+        return {
+                    \   'output' : 'failed: locked by other vim process',
+                    \   'exitCode' : 'ZFVimIM_cloud_lockUnavailable',
+                    \ }
+    else
+        return {
+                    \   'output' : 'success',
+                    \   'exitCode' : '0',
+                    \ }
+    endif
+endfunction
+
+" ============================================================
+augroup ZFVimIM_cloud_async_augroup
+    autocmd!
+    autocmd User ZFVimIM_event_OnUpdateDb
+                \  if g:ZFVimIM_cloudAsync_enable > 0 && ZFVimIM_cloudAsyncAvailable()
+                \|     call s:autoUploadAsync()
+                \| endif
+    autocmd VimEnter * call s:UA_autoInit()
+augroup END
+if exists('v:vim_did_enter') && v:vim_did_enter
+    call s:UA_autoInit()
+endif
 
